@@ -1,7 +1,6 @@
 import { shell } from 'electron';
 import React from 'react';
 import makeStyles from '@material-ui/core/styles/makeStyles';
-import Typography from '@material-ui/core/Typography';
 
 const useStyles = makeStyles(() => ({
 	footer: {
@@ -18,9 +17,6 @@ const useStyles = makeStyles(() => ({
 		display: 'flex',
 		justifyContent: 'space-evenly',
 		margin: 5,
-		'&>svg': {
-			cursor: 'pointer',
-		},
 	},
 }));
 
@@ -28,14 +24,13 @@ const Footer: React.FC = function () {
 	const classes = useStyles();
 	return (
 		<div className={classes.footer}>
-			<Typography>Made by Ottomated</Typography>
 			<div className={classes.row}>
 				<svg
 					width={36}
 					height={36}
 					viewBox="0 0 24 24"
 					onClick={() => {
-						shell.openExternal('https://github.com/ottomated/crewlink');
+						shell.openExternal('https://github.com/OhMyGuus/BetterCrewlink');
 					}}
 				>
 					<path
@@ -48,7 +43,7 @@ const Footer: React.FC = function () {
 					height={36}
 					viewBox="0 0 24 24"
 					onClick={() => {
-						shell.openExternal('https://twitch.tv/ottomated');
+						shell.openExternal('https://twitch.tv/thaguuss');
 					}}
 				>
 					<path
@@ -56,7 +51,7 @@ const Footer: React.FC = function () {
 						d="M11.64 5.93H13.07V10.21H11.64M15.57 5.93H17V10.21H15.57M7 2L3.43 5.57V18.43H7.71V22L11.29 18.43H14.14L20.57 12V2M19.14 11.29L16.29 14.14H13.43L10.93 16.64V14.14H7.71V3.43H19.14Z"
 					/>
 				</svg>
-				<svg
+				{/* <svg
 					width={36}
 					height={36}
 					viewBox="0 0 24 24"
@@ -68,13 +63,13 @@ const Footer: React.FC = function () {
 						fill="#1da1f2"
 						d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"
 					/>
-				</svg>
+				</svg> */}
 				<svg
 					width={36}
 					height={36}
 					viewBox="0 0 24 24"
 					onClick={() => {
-						shell.openExternal('https://paypal.me/ottomated');
+						shell.openExternal('https://www.paypal.com/donate?hosted_button_id=KS43BDTGN76JQ');
 					}}
 				>
 					<path
@@ -97,45 +92,12 @@ const Footer: React.FC = function () {
 							<stop offset="100%" style={{ stopColor: '#FF6663' }} />
 						</linearGradient>
 
-						<pattern
-							id="pattern"
-							x="0"
-							y="0"
-							width="300%"
-							height="100%"
-							patternUnits="userSpaceOnUse"
-						>
-							<rect
-								x="0"
-								y="0"
-								width="150%"
-								height="100%"
-								fill="url(#gradient)"
-							>
-								<animate
-									attributeType="XML"
-									attributeName="x"
-									from="0"
-									to="150%"
-									dur="2s"
-									repeatCount="indefinite"
-								/>
+						<pattern id="pattern" x="0" y="0" width="300%" height="100%" patternUnits="userSpaceOnUse">
+							<rect x="0" y="0" width="150%" height="100%" fill="url(#gradient)">
+								<animate attributeType="XML" attributeName="x" from="0" to="150%" dur="2s" repeatCount="indefinite" />
 							</rect>
-							<rect
-								x="-150%"
-								y="0"
-								width="150%"
-								height="100%"
-								fill="url(#gradient)"
-							>
-								<animate
-									attributeType="XML"
-									attributeName="x"
-									from="-150%"
-									to="0"
-									dur="2s"
-									repeatCount="indefinite"
-								/>
+							<rect x="-150%" y="0" width="150%" height="100%" fill="url(#gradient)">
+								<animate attributeType="XML" attributeName="x" from="-150%" to="0" dur="2s" repeatCount="indefinite" />
 							</rect>
 						</pattern>
 					</defs>

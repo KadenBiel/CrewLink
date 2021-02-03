@@ -1,37 +1,21 @@
-import React, {
-	Dispatch,
-	ErrorInfo,
-	ReactChild,
-	SetStateAction,
-	useEffect,
-	useReducer,
-	useState,
-} from 'react';
-import ReactDOM from 'react-dom';
+import React, { Dispatch, SetStateAction, useEffect, useReducer, useState } from 'react';
 import Voice from './Voice';
 import Menu from './Menu';
 import { ipcRenderer } from 'electron';
 import { AmongUsState } from '../common/AmongUsState';
-import Settings, {
-	settingsReducer,
-	lobbySettingsReducer,
-} from './settings/Settings';
-import {
-	GameStateContext,
-	SettingsContext,
-	LobbySettingsContext,
-} from './contexts';
+import Settings, { settingsReducer, lobbySettingsReducer } from './settings/Settings';
+import { GameStateContext, SettingsContext, LobbySettingsContext } from './contexts';
 import { ThemeProvider } from '@material-ui/core/styles';
 import {
 	AutoUpdaterState,
 	IpcHandlerMessages,
 	IpcMessages,
-	IpcOverlayMessages,
 	IpcRendererMessages,
 	IpcSyncMessages,
 } from '../common/ipc-messages';
 import theme from './theme';
 import SettingsIcon from '@material-ui/icons/Settings';
+import RefreshSharpIcon from '@material-ui/icons/RefreshSharp';
 import CloseIcon from '@material-ui/icons/Close';
 import IconButton from '@material-ui/core/IconButton';
 import Dialog from '@material-ui/core/Dialog';
@@ -43,9 +27,9 @@ import DialogContentText from '@material-ui/core/DialogContentText';
 import DialogActions from '@material-ui/core/DialogActions';
 import Button from '@material-ui/core/Button';
 import prettyBytes from 'pretty-bytes';
+import { IpcOverlayMessages } from '../common/ipc-messages';
+import ReactDOM from 'react-dom';
 import './css/index.css';
-import Typography from '@material-ui/core/Typography';
-import SupportLink from './SupportLink';
 
 let appVersion = '';
 if (typeof window !== 'undefined' && window.location) {
@@ -84,14 +68,13 @@ interface TitleBarProps {
 	setSettingsOpen: Dispatch<SetStateAction<boolean>>;
 }
 
-const TitleBar: React.FC<TitleBarProps> = function ({
-	settingsOpen,
-	setSettingsOpen,
-}: TitleBarProps) {
+const TitleBar: React.FC<TitleBarProps> = function ({ settingsOpen, setSettingsOpen }: TitleBarProps) {
 	const classes = useStyles();
 	return (
 		<div className={classes.root}>
-			<span className={classes.title}>CrewLink{appVersion}</span>
+			<span className={classes.title} style={{ marginLeft: 10 }}>
+				BetterCrewLink{appVersion}
+			</span>
 			<IconButton
 				className={classes.button}
 				style={{ left: 0 }}
@@ -99,6 +82,14 @@ const TitleBar: React.FC<TitleBarProps> = function ({
 				onClick={() => setSettingsOpen(!settingsOpen)}
 			>
 				<SettingsIcon htmlColor="#777" />
+			</IconButton>
+			<IconButton
+				className={classes.button}
+				style={{ left: 22 }}
+				size="small"
+				onClick={() => ipcRenderer.send('reload')}
+			>
+				<RefreshSharpIcon htmlColor="#777" />
 			</IconButton>
 			<IconButton
 				className={classes.button}
@@ -117,67 +108,7 @@ enum AppState {
 	VOICE,
 }
 
-interface ErrorBoundaryProps {
-	children: ReactChild;
-}
-interface ErrorBoundaryState {
-	error?: Error;
-}
-
-class ErrorBoundary extends React.Component<
-	ErrorBoundaryProps,
-	ErrorBoundaryState
-> {
-	constructor(props: ErrorBoundaryProps) {
-		super(props);
-		this.state = {};
-	}
-
-	static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-		// Update state so the next render will show the fallback UI.
-		return { error };
-	}
-
-	componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-		console.error('React Error: ', error, errorInfo);
-	}
-
-	render(): ReactChild {
-		if (this.state.error) {
-			return (
-				<div style={{ paddingTop: 16 }}>
-					<Typography align="center" variant="h6" color="error">
-						REACT ERROR
-					</Typography>
-					<Typography
-						align="center"
-						style={{
-							whiteSpace: 'pre-wrap',
-							fontSize: 12,
-							maxHeight: 200,
-							overflowY: 'auto',
-						}}
-					>
-						{this.state.error.stack}
-					</Typography>
-					<SupportLink />
-					<Button
-						style={{ margin: '10px auto', display: 'block' }}
-						variant="contained"
-						color="secondary"
-						onClick={() => window.location.reload()}
-					>
-						Reload App
-					</Button>
-				</div>
-			);
-		}
-
-		return this.props.children;
-	}
-}
-
-const App: React.FC = function () {
+export default function App(): JSX.Element {
 	const [state, setState] = useState<AppState>(AppState.MENU);
 	const [gameState, setGameState] = useState<AmongUsState>({} as AmongUsState);
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -186,7 +117,7 @@ const App: React.FC = function () {
 		state: 'unavailable',
 	});
 	const settings = useReducer(settingsReducer, {
-		alwaysOnTop: false,
+		alwaysOnTop: true,
 		microphone: 'Default',
 		speaker: 'Default',
 		pushToTalk: false,
@@ -195,20 +126,36 @@ const App: React.FC = function () {
 		deafenShortcut: 'RControl',
 		muteShortcut: 'RAlt',
 		hideCode: false,
-		enableSpatialAudio: true,
-		meetingOverlay: true,
+		natFix: false,
+		mobileHost: true,
 		overlayPosition: 'right',
+		compactOverlay: false,
+		enableOverlay: true,
+		meetingOverlay: false,
+		ghostVolume: 100,
+		masterVolume: 100,
+		vadEnabled: true,
+		echoCancellation: true,
+		enableSpatialAudio: true,
+		obsSecret: undefined,
+		obsOverlay: false,
+		obsComptaibilityMode: false,
+		noiseSuppression: true,
+		playerConfigMap: {},
 		localLobbySettings: {
 			maxDistance: 5.32,
 			haunting: false,
 			hearImpostorsInVents: false,
-			commsSabotage: true,
+			impostersHearImpostersInvent: false,
+			commsSabotage: false,
+			deadOnly: false,
+			meetingGhostOnly: false,
+			hearThroughCameras: false,
+			wallsBlockAudio: false,
+			visionHearing: false,
 		},
 	});
-	const lobbySettings = useReducer(
-		lobbySettingsReducer,
-		settings[0].localLobbySettings
-	);
+	const lobbySettings = useReducer(lobbySettingsReducer, settings[0].localLobbySettings);
 
 	useEffect(() => {
 		const onOpen = (_: Electron.IpcRendererEvent, isOpen: boolean) => {
@@ -217,14 +164,12 @@ const App: React.FC = function () {
 		const onState = (_: Electron.IpcRendererEvent, newState: AmongUsState) => {
 			setGameState(newState);
 		};
+
 		const onError = (_: Electron.IpcRendererEvent, error: string) => {
 			shouldInit = false;
 			setError(error);
 		};
-		const onAutoUpdaterStateChange = (
-			_: Electron.IpcRendererEvent,
-			state: AutoUpdaterState
-		) => {
+		const onAutoUpdaterStateChange = (_: Electron.IpcRendererEvent, state: AutoUpdaterState) => {
 			setUpdaterState((old) => ({ ...old, ...state }));
 		};
 		let shouldInit = true;
@@ -241,18 +186,12 @@ const App: React.FC = function () {
 					setError(error.message);
 				}
 			});
-		ipcRenderer.on(
-			IpcRendererMessages.AUTO_UPDATER_STATE,
-			onAutoUpdaterStateChange
-		);
+		ipcRenderer.on(IpcRendererMessages.AUTO_UPDATER_STATE, onAutoUpdaterStateChange);
 		ipcRenderer.on(IpcRendererMessages.NOTIFY_GAME_OPENED, onOpen);
 		ipcRenderer.on(IpcRendererMessages.NOTIFY_GAME_STATE_CHANGED, onState);
 		ipcRenderer.on(IpcRendererMessages.ERROR, onError);
 		return () => {
-			ipcRenderer.off(
-				IpcRendererMessages.AUTO_UPDATER_STATE,
-				onAutoUpdaterStateChange
-			);
+			ipcRenderer.off(IpcRendererMessages.AUTO_UPDATER_STATE, onAutoUpdaterStateChange);
 			ipcRenderer.off(IpcRendererMessages.NOTIFY_GAME_OPENED, onOpen);
 			ipcRenderer.off(IpcRendererMessages.NOTIFY_GAME_STATE_CHANGED, onState);
 			ipcRenderer.off(IpcRendererMessages.ERROR, onError);
@@ -261,19 +200,11 @@ const App: React.FC = function () {
 	}, []);
 
 	useEffect(() => {
-		ipcRenderer.send(
-			IpcMessages.SEND_TO_OVERLAY,
-			IpcOverlayMessages.NOTIFY_GAME_STATE_CHANGED,
-			gameState
-		);
+		ipcRenderer.send(IpcMessages.SEND_TO_OVERLAY, IpcOverlayMessages.NOTIFY_GAME_STATE_CHANGED, gameState);
 	}, [gameState]);
 
 	useEffect(() => {
-		ipcRenderer.send(
-			IpcMessages.SEND_TO_OVERLAY,
-			IpcOverlayMessages.NOTIFY_SETTINGS_CHANGED,
-			settings[0]
-		);
+		ipcRenderer.send(IpcMessages.SEND_TO_OVERLAY, IpcOverlayMessages.NOTIFY_SETTINGS_CHANGED, settings[0]);
 	}, [settings]);
 
 	let page;
@@ -291,59 +222,38 @@ const App: React.FC = function () {
 			<LobbySettingsContext.Provider value={lobbySettings}>
 				<SettingsContext.Provider value={settings}>
 					<ThemeProvider theme={theme}>
-						<TitleBar
-							settingsOpen={settingsOpen}
-							setSettingsOpen={setSettingsOpen}
-						/>
-						<ErrorBoundary>
-							<>
-								<Settings
-									open={settingsOpen}
-									onClose={() => setSettingsOpen(false)}
-								/>
-								<Dialog fullWidth open={updaterState.state !== 'unavailable'}>
-									<DialogTitle>Updating...</DialogTitle>
-									<DialogContent>
-										{(updaterState.state === 'downloading' ||
-											updaterState.state === 'downloaded') &&
-											updaterState.progress && (
-												<>
-													<LinearProgress
-														variant={
-															updaterState.state === 'downloaded'
-																? 'indeterminate'
-																: 'determinate'
-														}
-														value={updaterState.progress.percent}
-													/>
-													<DialogContentText>
-														{prettyBytes(updaterState.progress.transferred)} /{' '}
-														{prettyBytes(updaterState.progress.total)}
-													</DialogContentText>
-												</>
-											)}
-										{updaterState.state === 'error' && (
-											<DialogContentText color="error">
-												{updaterState.error}
+						<TitleBar settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen} />
+						<Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+						<Dialog fullWidth open={updaterState.state !== 'unavailable'}>
+							<DialogTitle>Updating...</DialogTitle>
+							<DialogContent>
+								{(updaterState.state === 'downloading' || updaterState.state === 'downloaded') &&
+									updaterState.progress && (
+										<>
+											<LinearProgress
+												variant={updaterState.state === 'downloaded' ? 'indeterminate' : 'determinate'}
+												value={updaterState.progress.percent}
+											/>
+											<DialogContentText>
+												{prettyBytes(updaterState.progress.transferred)} / {prettyBytes(updaterState.progress.total)}
 											</DialogContentText>
-										)}
-									</DialogContent>
-									{updaterState.state === 'error' && (
-										<DialogActions>
-											<Button href="https://github.com/ottomated/CrewLink/releases/latest">
-												Download Manually
-											</Button>
-										</DialogActions>
+										</>
 									)}
-								</Dialog>
-								{page}
-							</>
-						</ErrorBoundary>
+								{updaterState.state === 'error' && (
+									<DialogContentText color="error">{updaterState.error}</DialogContentText>
+								)}
+							</DialogContent>
+							{updaterState.state === 'error' && (
+								<DialogActions>
+									<Button href="https://github.com/ottomated/CrewLink/releases/latest">Download Manually</Button>
+								</DialogActions>
+							)}
+						</Dialog>
+						{page}
 					</ThemeProvider>
 				</SettingsContext.Provider>
 			</LobbySettingsContext.Provider>
 		</GameStateContext.Provider>
 	);
-};
-
+}
 ReactDOM.render(<App />, document.getElementById('app'));

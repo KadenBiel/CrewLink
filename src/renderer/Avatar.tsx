@@ -1,29 +1,18 @@
 import React, { useRef } from 'react';
 import { Player } from '../common/AmongUsState';
-import { backLayerHats, hatOffsets, hats, skins, players } from './cosmetics';
+import { backLayerHats, hatOffsets, hats, skins, players, coloredHats } from './cosmetics';
 import makeStyles from '@material-ui/core/styles/makeStyles';
 import MicOff from '@material-ui/icons/MicOff';
 import VolumeOff from '@material-ui/icons/VolumeOff';
 import WifiOff from '@material-ui/icons/WifiOff';
 import LinkOff from '@material-ui/icons/LinkOff';
-import Tooltip from '@material-ui/core/Tooltip';
+import ErrorOutlIne from '@material-ui/icons/ErrorOutlIne';
 
-interface UseStylesParams {
-	size: number;
-	borderColor: string;
-}
+// import Tooltip from '@material-ui/core/Tooltip';
+import Tooltip from 'react-tooltip-lite';
+import { SocketConfig } from '../common/ISettings';
+
 const useStyles = makeStyles(() => ({
-	avatar: {
-		borderRadius: '50%',
-		overflow: 'hidden',
-		position: 'relative',
-		borderStyle: 'solid',
-		transition: 'border-color .2s ease-out',
-		borderColor: ({ borderColor }: UseStylesParams) => borderColor,
-		borderWidth: ({ size }: UseStylesParams) => Math.max(2, size / 40),
-		width: '100%',
-		paddingBottom: '100%',
-	},
 	canvas: {
 		position: 'absolute',
 		width: '100%',
@@ -32,7 +21,7 @@ const useStyles = makeStyles(() => ({
 		background: '#ea3c2a',
 		position: 'absolute',
 		left: '50%',
-		top: '50%',
+		top: '62%',
 		transform: 'translate(-50%, -50%)',
 		border: '2px solid #690a00',
 		borderRadius: '50%',
@@ -47,6 +36,11 @@ export interface CanvasProps {
 	skin: number;
 	isAlive: boolean;
 	className: string;
+	lookLeft: boolean;
+	size: number;
+	borderColor: string;
+	color: number;
+	overflow: boolean;
 }
 
 export interface AvatarProps {
@@ -58,7 +52,12 @@ export interface AvatarProps {
 	deafened?: boolean;
 	muted?: boolean;
 	connectionState?: 'disconnected' | 'novoice' | 'connected';
-	style?: React.CSSProperties;
+	socketConfig?: SocketConfig;
+	showborder?: boolean;
+	showHat?: boolean;
+	lookLeft?: boolean;
+	overflow?: boolean;
+	onConfigChange?: () => void;
 }
 
 const Avatar: React.FC<AvatarProps> = function ({
@@ -70,16 +69,17 @@ const Avatar: React.FC<AvatarProps> = function ({
 	player,
 	size,
 	connectionState,
-	style,
+	socketConfig,
+	showborder,
+	showHat,
+	lookLeft = false,
+	overflow = false,
+	onConfigChange,
 }: AvatarProps) {
 	const status = isAlive ? 'alive' : 'dead';
 	let image = players[status][player.colorId];
 	if (!image) image = players[status][0];
-	const classes = useStyles({
-		borderColor: talking ? borderColor : 'transparent',
-		size,
-	});
-
+	const classes = useStyles();
 	let icon;
 
 	switch (connectionState) {
@@ -91,30 +91,61 @@ const Avatar: React.FC<AvatarProps> = function ({
 			}
 			break;
 		case 'novoice':
-			icon = (
-				<LinkOff
-					className={classes.icon}
-					style={{ background: '#e67e22', borderColor: '#694900' }}
-				/>
-			);
+			icon = <LinkOff className={classes.icon} style={{ background: '#e67e22', borderColor: '#694900' }} />;
 			break;
 		case 'disconnected':
 			icon = <WifiOff className={classes.icon} />;
 			break;
 	}
+	if (player.bugged) {
+		icon = <ErrorOutlIne className={classes.icon} style={{ background: 'red', borderColor: '' }} />;
+	}
 
 	return (
-		<Tooltip title={player.name} arrow placement="top">
-			<div className={classes.avatar} style={style}>
-				<Canvas
-					className={classes.canvas}
-					src={image}
-					hat={player.hatId - 1}
-					skin={player.skinId - 1}
-					isAlive={isAlive}
-				/>
-				{icon}
-			</div>
+		<Tooltip
+			useHover={!player.isLocal}
+			content={
+				<div>
+					<b>{player?.name}</b>
+					<div className="slidecontainer" style={{ minWidth: '55px' }}>
+						<input
+							type="range"
+							min="0"
+							max="2"
+							value={socketConfig?.volume}
+							className="relativeGainSlider"
+							style={{ width: '50px' }}
+							step="any"
+							onMouseLeave={() => {
+								console.log('onmouseleave');
+								if (onConfigChange) {
+									onConfigChange();
+								}
+							}}
+							onChange={(ev): void => {
+								if (socketConfig) {
+									socketConfig.volume = parseFloat(ev.target.value.substr(0, 6));
+								}
+							}}
+						></input>
+					</div>{' '}
+				</div>
+			}
+			padding={5}
+		>
+			<Canvas
+				className={classes.canvas}
+				src={image}
+				color={player.colorId}
+				hat={showHat === false ? -1 : player.hatId}
+				skin={player.skinId - 1}
+				isAlive={isAlive}
+				lookLeft={lookLeft === true}
+				borderColor={talking ? borderColor : showborder === true ? '#ccbdcc86' : 'transparent'}
+				size={size}
+				overflow={overflow}
+			/>
+			{icon}
 		</Tooltip>
 	);
 };
@@ -122,55 +153,85 @@ const Avatar: React.FC<AvatarProps> = function ({
 interface UseCanvasStylesParams {
 	backLayerHat: boolean;
 	isAlive: boolean;
+	hatY: string;
+	lookLeft: boolean;
+	size: number;
+	borderColor: string;
+	paddingLeft: number;
 }
 const useCanvasStyles = makeStyles(() => ({
 	base: {
-		width: '100%',
+		width: '105%',
 		position: 'absolute',
-		top: 0,
-		left: 0,
+		top: '22%',
+		left: ({ paddingLeft }: UseCanvasStylesParams) => paddingLeft,
 		zIndex: 2,
 	},
 	hat: {
+		width: '105%',
 		position: 'absolute',
-		left: '50%',
-		transform: 'translateX(calc(-50% + 4px)) scale(0.7)',
+		top: ({ hatY }: UseCanvasStylesParams) => `calc(22% + ${hatY})`,
+		left: ({ size, paddingLeft }: UseCanvasStylesParams) => Math.max(2, size / 40) / 2 + paddingLeft,
 		zIndex: ({ backLayerHat }: UseCanvasStylesParams) => (backLayerHat ? 1 : 4),
-		display: ({ isAlive }: UseCanvasStylesParams) =>
-			isAlive ? 'block' : 'none',
+		display: ({ isAlive }: UseCanvasStylesParams) => (isAlive ? 'block' : 'none'),
 	},
 	skin: {
 		position: 'absolute',
-		top: '38%',
-		left: '17%',
-		width: '73.5%',
-		transform: 'scale(0.8)',
+		top: 'calc(33% + 22%)',
+		left: ({ paddingLeft }: UseCanvasStylesParams) => paddingLeft,
+		width: '105%',
 		zIndex: 3,
-		display: ({ isAlive }: UseCanvasStylesParams) =>
-			isAlive ? 'block' : 'none',
+		display: ({ isAlive }: UseCanvasStylesParams) => (isAlive ? 'block' : 'none'),
+	},
+	avatar: {
+		// overflow: 'hidden',
+		borderRadius: '50%',
+		position: 'relative',
+		borderStyle: 'solid',
+		transition: 'border-color .2s ease-out',
+		borderColor: ({ borderColor }: UseCanvasStylesParams) => borderColor,
+		borderWidth: ({ size }: UseCanvasStylesParams) => Math.max(2, size / 40),
+		transform: ({ lookLeft }: UseCanvasStylesParams) => (lookLeft ? 'scaleX(-1)' : 'scaleX(1)'),
+		width: '100%',
+		paddingBottom: '100%',
 	},
 }));
 
-function Canvas({ src, hat, skin, isAlive }: CanvasProps) {
+function Canvas({ src, hat, skin, isAlive, lookLeft, size, borderColor, color, overflow }: CanvasProps) {
 	const hatImg = useRef<HTMLImageElement>(null);
 	const skinImg = useRef<HTMLImageElement>(null);
 	const image = useRef<HTMLImageElement>(null);
-	const hatY = 11 - hatOffsets[hat];
+	const hatY = hatOffsets[hat] || '-33%';
 	const classes = useCanvasStyles({
 		backLayerHat: backLayerHats.has(hat),
 		isAlive,
+		hatY,
+		lookLeft,
+		size,
+		borderColor,
+		paddingLeft: -7,
 	});
 
 	return (
 		<>
-			<img src={src} ref={image} className={classes.base} />
-			<img
-				src={hats[hat]}
-				ref={hatImg}
-				className={classes.hat}
-				style={{ top: `${hatY}%` }}
-			/>
-			<img src={skins[skin]} ref={skinImg} className={classes.skin} />
+			<div className={classes.avatar}>
+				<div
+					className={classes.avatar}
+					style={{
+						overflow: 'hidden',
+						position: 'absolute',
+						top: Math.max(2, size / 40) * -1,
+						left: Math.max(2, size / 40) * -1,
+						transform: 'unset',
+					}}
+				>
+					<img src={src} ref={image} className={classes.base} />
+					<img src={skins[skin]} ref={skinImg} className={classes.skin} />
+
+					{overflow && <img src={coloredHats[`${hat}${color}`] || hats[hat]} ref={hatImg} className={classes.hat} />}
+				</div>
+				{!overflow && <img src={coloredHats[`${hat}${color}`] || hats[hat]} ref={hatImg} className={classes.hat} />}
+			</div>
 		</>
 	);
 }

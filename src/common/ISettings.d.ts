@@ -8,15 +8,43 @@ export interface ISettings {
 	deafenShortcut: string;
 	muteShortcut: string;
 	hideCode: boolean;
-	enableSpatialAudio: boolean;
+	natFix: boolean;
+	compactOverlay: boolean;
+	overlayPosition: string;
+	enableOverlay: boolean;
 	meetingOverlay: boolean;
-	overlayPosition: 'left' | 'right' | 'hidden';
+
 	localLobbySettings: ILobbySettings;
+	ghostVolume: number;
+	masterVolume: number;
+	mobileHost: boolean;
+	vadEnabled: boolean;
+	echoCancellation: boolean;
+	noiseSuppression: boolean;
+	enableSpatialAudio: boolean;
+	playerConfigMap: playerConfigMap;
+	obsOverlay: boolean;
+	obsComptaibilityMode: boolean;
+	obsSecret: string | undefined;
 }
 
 export interface ILobbySettings {
 	maxDistance: number;
+	visionHearing: boolean;
 	haunting: boolean;
 	hearImpostorsInVents: boolean;
+	impostersHearImpostersInvent: boolean;
 	commsSabotage: boolean;
+	deadOnly: boolean;
+	meetingGhostOnly: boolean;
+	hearThroughCameras: boolean;
+	wallsBlockAudio: boolean;
+}
+
+export interface SocketConfig {
+	volume: number;
+}
+
+export interface playerConfigMap {
+	[socketId: number]: SocketConfig;
 }

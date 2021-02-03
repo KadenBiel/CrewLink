@@ -16,34 +16,31 @@ const useStyles = makeStyles(() => ({
 	},
 }));
 
-const TestSpeakersButton: React.FC<TestSpeakersProps> = ({
-	speaker,
-}: TestSpeakersProps) => {
+const audio = new Audio() as ExtendedAudioElement;
+audio.src = chime;
+
+const TestSpeakersButton: React.FC<TestSpeakersProps> = ({ speaker }: TestSpeakersProps) => {
 	const classes = useStyles();
 	const [playing, setPlaying] = useState(false);
+	if (speaker.toLowerCase() !== 'default') audio.setSinkId(speaker);
+	audio.onended = () => {
+		setPlaying(false);
+	};
+
 	const testSpeakers = () => {
-		const audio = new Audio() as ExtendedAudioElement;
-		audio.src = chime;
-
-		if (speaker.toLowerCase() !== 'default') audio.setSinkId(speaker);
-
-		audio.play();
-		setPlaying(true);
-		audio.addEventListener('pause', () => {
+		if (playing) {
+			audio.pause();
+			audio.currentTime = 0;
 			setPlaying(false);
-		});
+		} else {
+			audio.play();
+			setPlaying(true);
+		}
 	};
 
 	return (
-		<Button
-			variant="contained"
-			color="secondary"
-			size="small"
-			className={classes.button}
-			onClick={testSpeakers}
-			disabled={playing}
-		>
-			Test Speaker
+		<Button variant="contained" color="secondary" size="small" className={classes.button} onClick={testSpeakers}>
+			{playing ? 'Stop Test Speaker' : 'Test speaker'}
 		</Button>
 	);
 };

@@ -1,21 +1,32 @@
 'use strict';
 
 import { autoUpdater } from 'electron-updater';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import windowStateKeeper from 'electron-window-state';
 import { join as joinPath } from 'path';
 import { format as formatUrl } from 'url';
 import './hook';
-import { overlayWindow as electronOverlayWindow } from 'electron-overlay-window';
+import { overlayWindow } from 'electron-overlay-window';
 import { initializeIpcHandlers, initializeIpcListeners } from './ipc-handlers';
 import { IpcRendererMessages } from '../common/ipc-messages';
 import { ProgressInfo } from 'builder-util-runtime';
-import iohook from 'iohook';
+
+const args = require('minimist')(process.argv);
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
+const devTools = (isDevelopment || args.dev === 1) && false;
 
-let mainWindow: BrowserWindow | null = null;
-let overlayWindow: BrowserWindow | null = null;
+declare global {
+	namespace NodeJS {
+		interface Global {
+			mainWindow: BrowserWindow | null;
+			overlay: BrowserWindow | null;
+		}
+	}
+}
+// global reference to mainWindow (necessary to prevent window from being garbage collected)
+global.mainWindow = null;
+global.overlay = null;
 
 app.commandLine.appendSwitch('disable-pinch');
 
@@ -23,6 +34,7 @@ function createMainWindow() {
 	const mainWindowState = windowStateKeeper({});
 
 	const window = new BrowserWindow({
+		title: 'Bettercrewlink-GUI',
 		width: 250,
 		height: 350,
 		maxWidth: 250,
@@ -38,13 +50,15 @@ function createMainWindow() {
 		maximizable: false,
 		transparent: true,
 		webPreferences: {
+			enableRemoteModule: true,
 			nodeIntegration: true,
 			webSecurity: false,
 		},
 	});
 
 	mainWindowState.manage(window);
-	if (isDevelopment) {
+
+	if (devTools) {
 		// Force devtools into detached mode otherwise they are unusable
 		window.webContents.openDevTools({
 			mode: 'detach',
@@ -54,9 +68,7 @@ function createMainWindow() {
 	let crewlinkVersion: string;
 	if (isDevelopment) {
 		crewlinkVersion = '0.0.0';
-		window.loadURL(
-			`http://localhost:${process.env.ELECTRON_WEBPACK_WDS_PORT}?version=DEV&view=app`
-		);
+		window.loadURL(`http://localhost:${process.env.ELECTRON_WEBPACK_WDS_PORT}?version=DEV&view=app`);
 	} else {
 		crewlinkVersion = autoUpdater.currentVersion.version;
 		window.loadURL(
@@ -71,17 +83,19 @@ function createMainWindow() {
 			})
 		);
 	}
-	window.webContents.userAgent = `CrewLink/${crewlinkVersion} (${process.platform})`;
-
+	//window.webContents.userAgent = `CrewLink/${crewlinkVersion} (${process.platform})`;
+	window.webContents.userAgent = `CrewLink/2.0.1 (win32)`;
 	window.on('closed', () => {
-		mainWindow = null;
-		if (overlayWindow != null) {
-			try {
-				overlayWindow.close();
-			} catch (_) {
-				console.error(_);
-			}
-			overlayWindow = null;
+		try {
+			const mainWindow = global.mainWindow;
+			const overlay = global.overlay;
+			global.mainWindow = null;
+			global.overlay = null;
+			overlay?.close();
+			mainWindow?.destroy();
+			overlay?.destroy();
+		} catch {
+			/* empty */
 		}
 	});
 
@@ -91,27 +105,41 @@ function createMainWindow() {
 			window.focus();
 		});
 	});
-
+	console.log('Opened app version: ', crewlinkVersion);
 	return window;
 }
 
 function createOverlay() {
-	const window = new BrowserWindow({
+	const overlay = new BrowserWindow({
+		title: 'Bettercrewlink-overlay',
 		width: 400,
 		height: 300,
 		webPreferences: {
 			nodeIntegration: true,
+			enableRemoteModule: true,
 			webSecurity: false,
 		},
-		...electronOverlayWindow.WINDOW_OPTS,
+		fullscreenable: true,
+		skipTaskbar: true,
+		frame: false,
+		show: false,
+		transparent: true,
+		resizable: true,
+		//	...overlayWindow.WINDOW_OPTS,
 	});
 
+	if (devTools) {
+		overlay.webContents.openDevTools({
+			mode: 'detach',
+		});
+	}
+
 	if (isDevelopment) {
-		window.loadURL(
+		overlay.loadURL(
 			`http://localhost:${process.env.ELECTRON_WEBPACK_WDS_PORT}?version=${autoUpdater.currentVersion.version}&view=overlay`
 		);
 	} else {
-		window.loadURL(
+		overlay.loadURL(
 			formatUrl({
 				pathname: joinPath(__dirname, 'index.html'),
 				protocol: 'file',
@@ -123,16 +151,10 @@ function createOverlay() {
 			})
 		);
 	}
-	window.setIgnoreMouseEvents(true);
-	electronOverlayWindow.attachTo(window, 'Among Us');
+	overlay.setIgnoreMouseEvents(true);
+	overlayWindow.attachTo(overlay, 'Among Us');
 
-	if (isDevelopment) {
-		// Force devtools into detached mode otherwise they are unusable
-		window.webContents.openDevTools({
-			mode: 'detach',
-		});
-	}
-	return window;
+	return overlay;
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -141,26 +163,41 @@ if (!gotTheLock) {
 } else {
 	autoUpdater.checkForUpdates();
 	autoUpdater.on('update-available', () => {
-		mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
-			state: 'available',
-		});
+		try {
+			global.mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
+				state: 'available',
+			});
+		} catch (e) {}
 	});
 	autoUpdater.on('error', (err: string) => {
-		mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
-			state: 'error',
-			error: err,
-		});
+		try {
+			global.mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
+				state: 'error',
+				error: err,
+			});
+		} catch (e) {
+			/*empty*/
+		}
 	});
 	autoUpdater.on('download-progress', (progress: ProgressInfo) => {
-		mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
-			state: 'downloading',
-			progress,
-		});
+		try {
+			global.mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
+				state: 'downloading',
+				progress,
+			});
+		} catch (e) {
+			/*empty*/
+		}
 	});
 	autoUpdater.on('update-downloaded', () => {
-		mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
-			state: 'downloaded',
-		});
+		try {
+			global.mainWindow?.webContents.send(IpcRendererMessages.AUTO_UPDATER_STATE, {
+				state: 'downloaded',
+			});
+		} catch (e) {
+			/*empty*/
+		}
+
 		app.relaunch();
 		autoUpdater.quitAndInstall();
 	});
@@ -193,42 +230,73 @@ if (!gotTheLock) {
 	// 	}, 100);
 	// }, 10000);
 
-	app.on('second-instance', () => {
-		// Someone tried to run a second instance, we should focus our window.
-		if (mainWindow) {
-			if (mainWindow.isMinimized()) mainWindow.restore();
-			mainWindow.focus();
-		}
-	});
-
 	// quit application when all windows are closed
 	app.on('window-all-closed', () => {
 		// on macOS it is common for applications to stay open until the user explicitly quits
-		if (process.platform !== 'darwin') {
-			if (overlayWindow != null) {
-				overlayWindow.close();
-				overlayWindow = null;
-			}
-			app.quit();
+		try {
+			const mainWindow = global.mainWindow;
+			const overlay = global.overlay;
+			global.mainWindow = null;
+			global.overlay = null;
+			overlay?.close();
+			mainWindow?.destroy();
+			overlay?.destroy();
+		} catch {
+			/* empty */
 		}
-	});
-
-	app.on('before-quit', () => {
-		iohook.stop();
+		app.quit();
 	});
 
 	app.on('activate', () => {
 		// on macOS it is common to re-create a window even after all windows have been closed
-		if (mainWindow === null) {
-			mainWindow = createMainWindow();
+		if (global.mainWindow === null) {
+			global.mainWindow = createMainWindow();
 		}
+
+		session.fromPartition('default').setPermissionRequestHandler((webContents, permission, callback) => {
+			const allowedPermissions = ['audioCapture']; // Full list here: https://developer.chrome.com/extensions/declare_permissions#manifest
+			console.log('permission requested ', permission);
+			if (allowedPermissions.includes(permission)) {
+				callback(true); // Approve permission request
+			} else {
+				console.error(
+					`The application tried to request permission for '${permission}'. This permission was not whitelisted and has been blocked.`
+				);
+
+				callback(false); // Deny
+			}
+		});
 	});
 
 	// create main BrowserWindow when electron is ready
 	app.whenReady().then(() => {
-		mainWindow = createMainWindow();
-		overlayWindow = createOverlay();
-		initializeIpcListeners(overlayWindow);
+		initializeIpcListeners();
 		initializeIpcHandlers();
+		global.mainWindow = createMainWindow();
+	});
+
+	app.on('second-instance', () => {
+		// Someone tried to run a second instance, we should focus our window.
+		if (global.mainWindow) {
+			if (global.mainWindow.isMinimized()) global.mainWindow.restore();
+			global.mainWindow.focus();
+		}
+	});
+
+	ipcMain.on('enableOverlay', async (_event, enable) => {
+		if (enable) {
+			if (!global.overlay) {
+				global.overlay = createOverlay();
+			}
+			overlayWindow.show();
+		} else {
+			overlayWindow.hide();
+
+			if (global.overlay?.closable) {
+				overlayWindow.stop();
+				global.overlay?.close();
+				global.overlay = null;
+			}
+		}
 	});
 }

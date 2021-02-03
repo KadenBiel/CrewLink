@@ -1,20 +1,20 @@
 {
-  "name": "crewlink",
-  "version": "2.0.1",
+  "name": "bettercrewlink",
+  "version": "2.1.9",
   "license": "GPL-3.0-or-later",
   "description": "Free, open, Among Us proximity voice chat",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ottomated/crewlink.git"
+    "url": "https://github.com/OhMyGuus/crewlink.git"
   },
   "funding": {
     "type": "individual",
-    "url": "https://paypal.me/ottomated"
+    "url": "https://www.paypal.com/donate?hosted_button_id=KS43BDTGN76JQ"
   },
   "author": {
-    "name": "Ottomated",
-    "email": "otto@ottomated.net",
-    "url": "https://ottomated.net"
+    "name": "OhMyGuus",
+    "email": "info@guus.ninja",
+    "url": "https://bettercrewlink.app"
   },
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
@@ -26,18 +26,6 @@
     "dist:64": "yarn compile && electron-builder --win --x64",
     "publish": "yarn compile && electron-builder --win --x64 --ia32 --publish always"
   },
-  "iohook": {
-    "targets": [
-      "electron-80"
-    ],
-    "platforms": [
-      "win32"
-    ],
-    "arches": [
-      "x64",
-      "ia32"
-    ]
-  },
   "dependencies": {
     "@material-ui/core": "^4.11.2",
     "@material-ui/icons": "^4.11.2",
@@ -45,21 +33,26 @@
     "axios": "^0.21.0",
     "cross-spawn": "^7.0.3",
     "deep-equal": "^2.0.5",
-    "electron-overlay-window": "^1.0.4",
+    "electron-overlay-window": "git://github.com/OhMyGuus/electron-overlay-window",
     "electron-store": "^6.0.1",
     "electron-updater": "^4.3.5",
     "electron-window-state": "^5.0.3",
-    "iohook": "^0.7.1",
     "memoryjs": "git://github.com/Rob--/memoryjs",
+    "minimist": "^1.2.5",
+    "node-keyboard-watcher": "git://github.com/OhMyGuus/node-keyboard-watcher",
+    "path-intersection": "^2.2.0",
     "pretty-bytes": "^5.5.0",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",
-    "registry-js": "^1.12.0",
-    "simple-peer": "^9.8.0",
+    "react-router-dom": "^5.2.0",
+    "react-tooltip-lite": "^1.12.0",
+    "registry-js": "1.13.0",
+    "simple-peer": "https://github.com/vrnagy/simple-peer.git",
     "socket.io-client": "^2.3.1",
     "source-map-support": "^0.5.16",
     "structron": "^0.2.4",
-    "valid-url": "^1.0.9"
+    "valid-url": "^1.0.9",
+    "webrtc-adapter": "^7.7.0"
   },
   "devDependencies": {
     "@babel/core": "^7.12.10",
@@ -80,7 +73,7 @@
     "@typescript-eslint/eslint-plugin": "^4.9.1",
     "@typescript-eslint/parser": "^4.9.1",
     "arraybuffer-loader": "^1.0.8",
-    "electron": "9.3.3",
+    "electron": "11.1.1",
     "electron-builder": "^22.9.1",
     "electron-webpack": "^2.8.2",
     "electron-webpack-ts": "^4.0.1",
@@ -91,6 +84,7 @@
     "prettier": "^2.2.1",
     "prettier-eslint": "^12.0.0",
     "typescript": "^4.0.3",
-    "webpack": "~4.42.1"
+    "webpack": "~4.42.1",
+    "webpack-dev-server": "^3.11.0"
   }
 }

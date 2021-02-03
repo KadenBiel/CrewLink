@@ -1,16 +1,6 @@
 import Store from 'electron-store';
-import React, {
-	ReactChild,
-	useContext,
-	useEffect,
-	useReducer,
-	useState,
-} from 'react';
-import {
-	SettingsContext,
-	LobbySettingsContext,
-	GameStateContext,
-} from '../contexts';
+import React, { ReactChild, useContext, useEffect, useReducer, useState } from 'react';
+import { SettingsContext, LobbySettingsContext, GameStateContext } from '../contexts';
 import MicrophoneSoundBar from './MicrophoneSoundBar';
 import TestSpeakersButton from './TestSpeakersButton';
 import { ISettings, ILobbySettings } from '../../common/ISettings';
@@ -37,6 +27,9 @@ import DialogContent from '@material-ui/core/DialogContent';
 import DialogActions from '@material-ui/core/DialogActions';
 import { GameState } from '../../common/AmongUsState';
 import Button from '@material-ui/core/Button';
+import { ipcRenderer, remote } from 'electron';
+import { IpcHandlerMessages } from '../../common/ipc-messages';
+import DialogContentText from '@material-ui/core/DialogContentText';
 
 interface StyleInput {
 	open: boolean;
@@ -64,8 +57,7 @@ const useStyles = makeStyles((theme) => ({
 		marginTop: theme.spacing(3),
 		transition: 'transform .1s ease-in-out',
 		WebkitAppRegion: 'no-drag',
-		transform: ({ open }: StyleInput) =>
-			open ? 'translateX(0)' : 'translateX(-100%)',
+		transform: ({ open }: StyleInput) => (open ? 'translateX(0)' : 'translateX(-100%)'),
 	},
 	header: {
 		display: 'flex',
@@ -111,6 +103,7 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 const keys = new Set([
+	'CapsLock',
 	'Space',
 	'Backspace',
 	'Delete',
@@ -124,52 +117,38 @@ const keys = new Set([
 	'PageUp',
 	'PageDown',
 	'Escape',
-	'LControl',
 	'LShift',
-	'LAlt',
-	'RControl',
 	'RShift',
 	'RAlt',
+	'LAlt',
+	'RControl',
+	'LControl',
 ]);
 
-const storeConfig: Store.Options<ISettings> = {
+const store = new Store<ISettings>({
 	migrations: {
-		'1.1.3': (store) => {
-			const serverIP = store.get('serverIP');
-			if (typeof serverIP === 'string') {
-				const serverURL = `http://${serverIP}`;
-				if (validateServerUrl(serverURL)) {
-					store.set('serverURL', serverURL);
-				} else {
-					console.warn(
-						'Error while parsing the old serverIP property. Default URL will be used instead.'
-					);
-				}
-
-				// @ts-ignore: Old serverIP property no longer exists in ISettings
-				store.delete('serverIP');
+		'2.0.6': (store) => {
+			if (
+				store.get('serverURL') === 'https://bettercrewl.ink:6523' ||
+				store.get('serverURL') === 'http://bettercrewl.ink' ||
+				store.get('serverURL') === 'http://crewlink.guus.info' ||
+				store.get('serverURL') === 'https://crewlink.guus.info'
+			) {
+				store.set('serverURL', 'https://bettercrewl.ink');
 			}
 		},
-		'1.1.5': (store) => {
-			const serverURL = store.get('serverURL');
-			if (serverURL === 'http://54.193.94.35:9736') {
-				store.set('serverURL', 'https://crewl.ink');
+		'2.0.7': (store) => {
+			if (
+				store.get('serverURL') === 'https://bettercrewl.ink:6523' ||
+				store.get('serverURL') === 'http://bettercrewl.ink' ||
+				store.get('serverURL') === 'http://crewlink.guus.info' ||
+				store.get('serverURL') === 'https://crewlink.guus.ninja'
+			) {
+				store.set('serverURL', 'https://bettercrewl.ink');
 			}
 		},
-		'1.1.6': (store) => {
-			const enableSpatialAudio = store.get('stereoInLobby');
-			if (typeof enableSpatialAudio === 'boolean') {
-				store.set('enableSpatialAudio', enableSpatialAudio);
-			}
-			// @ts-ignore
-			store.delete('stereoInLobby');
-		},
-		'1.2.0': (store) => {
-			if (store.get('serverURL') !== 'https://crewl.ink') {
-				store.set('serverURL', 'https://crewl.ink');
-			}
-			// @ts-ignore
-			store.delete('offsets');
+		'2.1.4': (store) => {
+			store.set('playerConfigMap', {});
 		},
 	},
 	schema: {
@@ -210,9 +189,70 @@ const storeConfig: Store.Options<ISettings> = {
 			type: 'boolean',
 			default: false,
 		},
+		compactOverlay: {
+			type: 'boolean',
+			default: false,
+		},
+		overlayPosition: {
+			type: 'string',
+			default: 'right',
+		},
+		meetingOverlay: {
+			type: 'boolean',
+			default: true,
+		},
+		enableOverlay: {
+			type: 'boolean',
+			default: true,
+		},
+		ghostVolume: {
+			type: 'number',
+			default: 100,
+		},
+		masterVolume: {
+			type: 'number',
+			default: 100,
+		},
+		natFix: {
+			type: 'boolean',
+			default: false,
+		},
+		mobileHost: {
+			type: 'boolean',
+			default: true,
+		},
+		vadEnabled: {
+			type: 'boolean',
+			default: true,
+		},
 		enableSpatialAudio: {
 			type: 'boolean',
 			default: true,
+		},
+		obsSecret: {
+			type: 'string',
+			default: undefined,
+		},
+		obsComptaibilityMode: {
+			type: 'boolean',
+			default: true,
+		},
+		obsOverlay: {
+			type: 'boolean',
+			default: false,
+		},
+		echoCancellation: {
+			type: 'boolean',
+			default: true,
+		},
+		noiseSuppression: {
+			type: 'boolean',
+			default: true,
+		},
+
+		playerConfigMap: {
+			type: 'object',
+			default: {},
 		},
 		localLobbySettings: {
 			type: 'object',
@@ -225,35 +265,53 @@ const storeConfig: Store.Options<ISettings> = {
 					type: 'boolean',
 					default: false,
 				},
+				commsSabotage: {
+					type: 'boolean',
+					default: false,
+				},
 				hearImpostorsInVents: {
 					type: 'boolean',
 					default: false,
 				},
-				commsSabotage: {
+				impostersHearImpostersInvent: {
 					type: 'boolean',
-					default: true,
+					default: false,
+				},
+				deadOnly: {
+					type: 'boolean',
+					default: false,
+				},
+				meetingGhostOnly: {
+					type: 'boolean',
+					default: false,
+				},
+				visionHearing: {
+					type: 'boolean',
+					default: false,
+				},
+				hearThroughCameras: {
+					type: 'boolean',
+					default: false,
+				},
+				wallsBlockAudio: {
+					type: 'boolean',
+					default: false,
 				},
 			},
 			default: {
 				maxDistance: 5.32,
 				haunting: false,
+				commsSabotage: false,
 				hearImpostorsInVents: false,
-				commsSabotage: true,
+				hearThroughCameras: false,
+				wallsBlockAudio: false,
+				deadOnly: false,
+				meetingGhostOnly: false,
+				visionHearing: false,
 			},
 		},
-		meetingOverlay: {
-			type: 'boolean',
-			default: true,
-		},
-		overlayPosition: {
-			type: 'string',
-			enum: ['left', 'right', 'hidden'],
-			default: 'right',
-		},
 	},
-};
-
-const store = new Store<ISettings>(storeConfig);
+});
 
 export interface SettingsProps {
 	open: boolean;
@@ -325,11 +383,7 @@ type URLInputProps = {
 	className: string;
 };
 
-const URLInput: React.FC<URLInputProps> = function ({
-	initialURL,
-	onValidURL,
-	className,
-}: URLInputProps) {
+const URLInput: React.FC<URLInputProps> = function ({ initialURL, onValidURL, className }: URLInputProps) {
 	const [isValidURL, setURLValid] = useState(true);
 	const [currentURL, setCurrentURL] = useState(initialURL);
 	const [open, setOpen] = useState(false);
@@ -350,7 +404,7 @@ const URLInput: React.FC<URLInputProps> = function ({
 
 	return (
 		<>
-			<Button variant="text" color="secondary" onClick={() => setOpen(true)}>
+			<Button variant="contained" color="secondary" onClick={() => setOpen(true)}>
 				Change Voice Server
 			</Button>
 			<Dialog fullScreen open={open} onClose={() => setOpen(false)}>
@@ -368,8 +422,7 @@ const URLInput: React.FC<URLInputProps> = function ({
 						helperText={isValidURL ? '' : 'Invalid URL'}
 					/>
 					<Alert severity="error">
-						This option is for advanced users only. Other servers can steal your
-						info or crash CrewLink.
+						This option is for advanced users only. Other servers can steal your info or crash CrewLink.
 					</Alert>
 					<Button
 						color="primary"
@@ -418,11 +471,14 @@ interface DisabledTooltipProps {
 	children: ReactChild;
 }
 
-const DisabledTooltip: React.FC<DisabledTooltipProps> = function ({
-	disabled,
-	children,
-	title,
-}: DisabledTooltipProps) {
+interface IConfirmDialog {
+	confirmCallback?: () => void;
+	description?: string;
+	title?: string;
+	open: boolean;
+}
+
+const DisabledTooltip: React.FC<DisabledTooltipProps> = function ({ disabled, children, title }: DisabledTooltipProps) {
 	if (disabled)
 		return (
 			<Tooltip placement="top" arrow title={title}>
@@ -432,10 +488,7 @@ const DisabledTooltip: React.FC<DisabledTooltipProps> = function ({
 	else return <>{children}</>;
 };
 
-const Settings: React.FC<SettingsProps> = function ({
-	open,
-	onClose,
-}: SettingsProps) {
+const Settings: React.FC<SettingsProps> = function ({ open, onClose }: SettingsProps) {
 	const classes = useStyles({ open });
 	const [settings, setSettings] = useContext(SettingsContext);
 	const gameState = useContext(GameStateContext);
@@ -459,8 +512,21 @@ const Settings: React.FC<SettingsProps> = function ({
 		settings.microphone,
 		settings.speaker,
 		settings.serverURL,
-		settings.enableSpatialAudio,
+		settings.vadEnabled,
+		settings.natFix,
+		settings.noiseSuppression,
+		settings.echoCancellation,
+		settings.obsComptaibilityMode,
+		settings.mobileHost
 	]);
+
+	useEffect(() => {
+		remote.getCurrentWindow().setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver');
+	}, [settings.alwaysOnTop]);
+
+	useEffect(() => {
+		ipcRenderer.send('enableOverlay', settings.enableOverlay);
+	}, [settings.enableOverlay]);
 
 	const [devices, setDevices] = useState<MediaDevice[]>([]);
 	const [_, updateDevices] = useReducer((state) => state + 1, 0);
@@ -486,26 +552,31 @@ const Settings: React.FC<SettingsProps> = function ({
 	}, [_]);
 
 	const setShortcut = (ev: React.KeyboardEvent, shortcut: string) => {
+		//	console.log(ev, shortcut);
 		let k = ev.key;
 		if (k.length === 1) k = k.toUpperCase();
 		else if (k.startsWith('Arrow')) k = k.substring(5);
 		if (k === ' ') k = 'Space';
 
-		if (k === 'Control' || k === 'Alt' || k === 'Shift')
-			k = (ev.location === 1 ? 'L' : 'R') + k;
+		/* @ts-ignore */
+		const c = ev.code as string;
+		if (c && c.startsWith('Numpad')) {
+			k = c;
+		}
 
-		if (/^[0-9A-Z]$/.test(k) || /^F[0-9]{1,2}$/.test(k) || keys.has(k)) {
+		if (k === 'Control' || k === 'Alt' || k === 'Shift') k = (ev.location === 1 ? 'L' : 'R') + k;
+
+		if (/^[0-9A-Z]$/.test(k) || /^F[0-9]{1,2}$/.test(k) || keys.has(k) || k.startsWith('Numpad')) {
 			setSettings({
 				type: 'setOne',
 				action: [shortcut, k],
 			});
+
+			ipcRenderer.send(IpcHandlerMessages.RESET_KEYHOOKS);
 		}
 	};
 
-	const setMouseShortcut = (
-		ev: React.MouseEvent<HTMLDivElement>,
-		shortcut: string
-	) => {
+	const setMouseShortcut = (ev: React.MouseEvent<HTMLDivElement>, shortcut: string) => {
 		if (ev.button > 2) {
 			// this makes our button start at 1 instead of 0
 			// React Mouse event starts at 0, but IOHooks starts at 1
@@ -514,24 +585,43 @@ const Settings: React.FC<SettingsProps> = function ({
 				type: 'setOne',
 				action: [shortcut, k],
 			});
+			ipcRenderer.send(IpcHandlerMessages.RESET_KEYHOOKS);
 		}
 	};
 
 	const microphones = devices.filter((d) => d.kind === 'audioinput');
 	const speakers = devices.filter((d) => d.kind === 'audiooutput');
-	const [localDistance, setLocalDistance] = useState(
-		settings.localLobbySettings.maxDistance
-	);
-	useEffect(() => {
-		setLocalDistance(settings.localLobbySettings.maxDistance);
-	}, [settings.localLobbySettings.maxDistance]);
+	const [localLobbySettings, setLocalLobbySettings] = useState(settings.localLobbySettings);
 
-	const isInMenuOrLobby =
-		gameState?.gameState === GameState.LOBBY ||
-		gameState?.gameState === GameState.MENU;
+	useEffect(() => {
+		setLocalLobbySettings(settings.localLobbySettings);
+	}, [settings.localLobbySettings]);
+
+	const isInMenuOrLobby = gameState?.gameState === GameState.LOBBY || gameState?.gameState === GameState.MENU;
 	const canChangeLobbySettings =
-		gameState?.gameState === GameState.MENU ||
-		(gameState?.isHost && gameState?.gameState === GameState.LOBBY);
+		gameState?.gameState === GameState.MENU || (gameState?.isHost && gameState?.gameState === GameState.LOBBY);
+
+	const [warningDialog, setWarningDialog] = React.useState({ open: false } as IConfirmDialog);
+
+	const handleWarningDialogClose = (confirm: boolean) => {
+		if (confirm && warningDialog.confirmCallback) {
+			warningDialog.confirmCallback();
+		}
+		setWarningDialog({ open: false });
+	};
+
+	const openWarningDialog = (
+		dialogTitle: string,
+		dialogDescription: string,
+		confirmCallback?: () => any,
+		showDialog?: boolean
+	) => {
+		if (!showDialog) {
+			if (confirmCallback) confirmCallback();
+		} else {
+			setWarningDialog({ title: dialogTitle, description: dialogDescription, open: true, confirmCallback });
+		}
+	};
 
 	return (
 		<Box className={classes.root}>
@@ -540,10 +630,10 @@ const Settings: React.FC<SettingsProps> = function ({
 					className={classes.back}
 					size="small"
 					onClick={() => {
-						setSettings({
-							type: 'setOne',
-							action: ['localLobbySettings', lobbySettings],
-						});
+						// setSettings({
+						// 	type: 'setOne',
+						// 	action: ['localLobbySettings', lobbySettings],
+						// });
 						if (unsaved) {
 							onClose();
 							location.reload();
@@ -557,136 +647,292 @@ const Settings: React.FC<SettingsProps> = function ({
 			<div className={classes.scroll}>
 				{/* Lobby Settings */}
 				<div>
+					<Dialog
+						open={warningDialog.open}
+						onClose={handleWarningDialogClose}
+						aria-labelledby="alert-dialog-title"
+						aria-describedby="alert-dialog-description"
+					>
+						<DialogTitle id="alert-dialog-title">{warningDialog.title}</DialogTitle>
+						<DialogContent>
+							<DialogContentText id="alert-dialog-description">{warningDialog.description}</DialogContentText>
+						</DialogContent>
+						<DialogActions>
+							<Button onClick={() => handleWarningDialogClose(true)} color="primary">
+								Confirm
+							</Button>
+							<Button onClick={() => handleWarningDialogClose(false)} color="primary" autoFocus>
+								Cancel
+							</Button>
+						</DialogActions>
+					</Dialog>
 					<Typography variant="h6">Lobby Settings</Typography>
 					<Typography gutterBottom>
-						Voice Distance:{' '}
-						{canChangeLobbySettings ? localDistance : lobbySettings.maxDistance}
+						<i>
+							{canChangeLobbySettings
+								? localLobbySettings.visionHearing
+								: lobbySettings.visionHearing
+								? 'Imposter & original crewlink'
+								: ''}
+						</i>{' '}
+						Voice Distance: {canChangeLobbySettings ? localLobbySettings.maxDistance : lobbySettings.maxDistance}
 					</Typography>
 					<DisabledTooltip
 						disabled={!canChangeLobbySettings}
-						title={
-							isInMenuOrLobby
-								? 'Only the game host can change this!'
-								: 'You can only change this in the lobby!'
-						}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
 					>
 						<Slider
 							disabled={!canChangeLobbySettings}
-							value={
-								canChangeLobbySettings
-									? localDistance
-									: lobbySettings.maxDistance
-							}
+							value={canChangeLobbySettings ? localLobbySettings.maxDistance : lobbySettings.maxDistance}
 							min={1}
 							max={10}
 							step={0.1}
 							onChange={(_, newValue: number | number[]) => {
-								setLocalDistance(newValue as number);
+								localLobbySettings.maxDistance = newValue as number;
+								setLocalLobbySettings(localLobbySettings);
 							}}
 							onChangeCommitted={(_, newValue: number | number[]) => {
 								setSettings({
 									type: 'setLobbySetting',
 									action: ['maxDistance', newValue as number],
 								});
-								if (gameState?.isHost) {
-									setLobbySettings({
-										type: 'setOne',
-										action: ['maxDistance', newValue as number],
-									});
-								}
 							}}
 						/>
 					</DisabledTooltip>
 					<DisabledTooltip
 						disabled={!canChangeLobbySettings}
-						title={
-							isInMenuOrLobby
-								? 'Only the game host can change this!'
-								: 'You can only change this in the lobby!'
-						}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Hear people in vision only"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								console.log('new vlaue of setting: ', newValue);
+								// openWarningDialog(
+								// 	'Be aware!',
+								// 	'Imposters and original crewlink users still use the voice distance setting',
+								// 	() => {
+								localLobbySettings.visionHearing = newValue;
+								setSettings({
+									type: 'setLobbySetting',
+									action: ['visionHearing', newValue],
+								});
+
+								setLocalLobbySettings(localLobbySettings);
+								// 	},
+								// 	newValue
+								// );
+							}}
+							value={canChangeLobbySettings ? localLobbySettings.visionHearing : lobbySettings.visionHearing}
+							checked={canChangeLobbySettings ? localLobbySettings.visionHearing : lobbySettings.visionHearing}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
 					>
 						<FormControlLabel
 							label="Impostors Hear Dead"
 							disabled={!canChangeLobbySettings}
-							checked={
-								canChangeLobbySettings
-									? settings.localLobbySettings.haunting
-									: lobbySettings.haunting
-							}
-							onChange={(_, checked: boolean) => {
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.haunting = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
 								setSettings({
 									type: 'setLobbySetting',
-									action: ['haunting', checked],
+									action: ['haunting', newValue],
 								});
-								if (gameState?.isHost) {
-									setLobbySettings({
-										type: 'setOne',
-										action: ['haunting', checked],
-									});
-								}
 							}}
+							value={canChangeLobbySettings ? localLobbySettings.haunting : lobbySettings.haunting}
+							checked={canChangeLobbySettings ? localLobbySettings.haunting : lobbySettings.haunting}
 							control={<Checkbox />}
 						/>
 					</DisabledTooltip>
+
 					<DisabledTooltip
 						disabled={!canChangeLobbySettings}
-						title={
-							isInMenuOrLobby
-								? 'Only the game host can change this!'
-								: 'You can only change this in the lobby!'
-						}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
 					>
 						<FormControlLabel
 							label="Hear Impostors In Vents"
 							disabled={!canChangeLobbySettings}
-							checked={
-								canChangeLobbySettings
-									? settings.localLobbySettings.hearImpostorsInVents
-									: lobbySettings.hearImpostorsInVents
-							}
-							onChange={(_, checked: boolean) => {
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.hearImpostorsInVents = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
 								setSettings({
 									type: 'setLobbySetting',
-									action: ['hearImpostorsInVents', checked],
+									action: ['hearImpostorsInVents', newValue],
 								});
-								if (gameState?.isHost) {
-									setLobbySettings({
-										type: 'setOne',
-										action: ['hearImpostorsInVents', checked],
-									});
-								}
 							}}
+							value={
+								canChangeLobbySettings ? localLobbySettings.hearImpostorsInVents : lobbySettings.hearImpostorsInVents
+							}
+							checked={
+								canChangeLobbySettings ? localLobbySettings.hearImpostorsInVents : lobbySettings.hearImpostorsInVents
+							}
 							control={<Checkbox />}
 						/>
 					</DisabledTooltip>
 					<DisabledTooltip
 						disabled={!canChangeLobbySettings}
-						title={
-							isInMenuOrLobby
-								? 'Only the game host can change this!'
-								: 'You can only change this in the lobby!'
-						}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Private talk in vents"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.impostersHearImpostersInvent = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
+								setSettings({
+									type: 'setLobbySetting',
+									action: ['impostersHearImpostersInvent', newValue],
+								});
+							}}
+							value={
+								canChangeLobbySettings
+									? localLobbySettings.impostersHearImpostersInvent
+									: lobbySettings.impostersHearImpostersInvent
+							}
+							checked={
+								canChangeLobbySettings
+									? localLobbySettings.impostersHearImpostersInvent
+									: lobbySettings.impostersHearImpostersInvent
+							}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
 					>
 						<FormControlLabel
 							label="Comms Sabotage Disables Voice"
 							disabled={!canChangeLobbySettings}
-							checked={
-								canChangeLobbySettings
-									? settings.localLobbySettings.commsSabotage
-									: lobbySettings.commsSabotage
-							}
-							onChange={(_, checked: boolean) => {
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.commsSabotage = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
 								setSettings({
 									type: 'setLobbySetting',
-									action: ['commsSabotage', checked],
+									action: ['commsSabotage', newValue],
 								});
-								if (gameState?.isHost) {
-									setLobbySettings({
-										type: 'setOne',
-										action: ['commsSabotage', checked],
-									});
-								}
 							}}
+							value={canChangeLobbySettings ? localLobbySettings.commsSabotage : lobbySettings.commsSabotage}
+							checked={canChangeLobbySettings ? localLobbySettings.commsSabotage : lobbySettings.commsSabotage}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Hear through cameras"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.hearThroughCameras = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
+								setSettings({
+									type: 'setLobbySetting',
+									action: ['hearThroughCameras', newValue],
+								});
+							}}
+							value={canChangeLobbySettings ? localLobbySettings.hearThroughCameras : lobbySettings.hearThroughCameras}
+							checked={
+								canChangeLobbySettings ? localLobbySettings.hearThroughCameras : lobbySettings.hearThroughCameras
+							}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Walls block audio"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								localLobbySettings.wallsBlockAudio = newValue;
+								setLocalLobbySettings(localLobbySettings);
+
+								setSettings({
+									type: 'setLobbySetting',
+									action: ['wallsBlockAudio', newValue],
+								});
+							}}
+							value={canChangeLobbySettings ? localLobbySettings.wallsBlockAudio : lobbySettings.wallsBlockAudio}
+							checked={canChangeLobbySettings ? localLobbySettings.wallsBlockAudio : lobbySettings.wallsBlockAudio}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Only ghost can talk/hear"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								console.log('new vlaue of setting: ', newValue);
+								openWarningDialog(
+									'Are you sure?',
+									'This disables the sound for alive players.',
+									() => {
+										localLobbySettings.meetingGhostOnly = false;
+										localLobbySettings.deadOnly = newValue;
+										setSettings({
+											type: 'setLobbySetting',
+											action: ['meetingGhostOnly', false],
+										});
+										setSettings({
+											type: 'setLobbySetting',
+											action: ['deadOnly', newValue],
+										});
+										setLocalLobbySettings(localLobbySettings);
+									},
+									newValue
+								);
+							}}
+							value={canChangeLobbySettings ? localLobbySettings.deadOnly : lobbySettings.deadOnly}
+							checked={canChangeLobbySettings ? localLobbySettings.deadOnly : lobbySettings.deadOnly}
+							control={<Checkbox />}
+						/>
+					</DisabledTooltip>
+					<DisabledTooltip
+						disabled={!canChangeLobbySettings}
+						title={isInMenuOrLobby ? 'Only the game host can change this!' : 'You can only change this in the lobby!'}
+					>
+						<FormControlLabel
+							label="Meetings &amp; lobby only"
+							disabled={!canChangeLobbySettings}
+							onChange={(_, newValue: boolean) => {
+								console.log('new vlaue of setting: ', newValue);
+								openWarningDialog(
+									'Are you sure?',
+									'This disables the sound for alive players outside meetings',
+									() => {
+										localLobbySettings.meetingGhostOnly = newValue;
+										localLobbySettings.deadOnly = false;
+										setSettings({
+											type: 'setLobbySetting',
+											action: ['meetingGhostOnly', newValue],
+										});
+										setSettings({
+											type: 'setLobbySetting',
+											action: ['deadOnly', false],
+										});
+										setLocalLobbySettings(localLobbySettings);
+									},
+									newValue
+								);
+							}}
+							value={canChangeLobbySettings ? localLobbySettings.meetingGhostOnly : lobbySettings.meetingGhostOnly}
+							checked={canChangeLobbySettings ? localLobbySettings.meetingGhostOnly : lobbySettings.meetingGhostOnly}
 							control={<Checkbox />}
 						/>
 					</DisabledTooltip>
@@ -750,17 +996,41 @@ const Settings: React.FC<SettingsProps> = function ({
 						});
 					}}
 				>
-					<FormControlLabel
-						label="Voice Activity"
-						value={false}
-						control={<Radio />}
-					/>
-					<FormControlLabel
-						label="Push To Talk"
-						value={true}
-						control={<Radio />}
-					/>
+					<FormControlLabel label="Voice Activity" value={false} control={<Radio />} />
+					<FormControlLabel label="Push To Talk" value={true} control={<Radio />} />
+					<Divider />
 				</RadioGroup>
+				<div>
+					<Typography id="input-slider" gutterBottom>
+						Crew volume as ghost
+					</Typography>
+					<Slider
+						value={settings.ghostVolume}
+						valueLabelDisplay="auto"
+						onChange={(_, newValue: number | number[]) => {
+							setSettings({
+								type: 'setOne',
+								action: ['ghostVolume', newValue],
+							});
+						}}
+						aria-labelledby="input-slider"
+					/>
+					<Typography id="input-slider" gutterBottom>
+						Master volume
+					</Typography>
+					<Slider
+						value={settings.masterVolume}
+						valueLabelDisplay="auto"
+						max={200}
+						onChange={(_, newValue: number | number[]) => {
+							setSettings({
+								type: 'setOne',
+								action: ['masterVolume', newValue],
+							});
+						}}
+						aria-labelledby="input-slider"
+					/>
+				</div>
 				<Divider />
 				<Typography variant="h6">Keyboard Shortcuts</Typography>
 				<Grid container spacing={1}>
@@ -814,47 +1084,180 @@ const Settings: React.FC<SettingsProps> = function ({
 						/>
 					</Grid>
 				</Grid>
+
 				<Divider />
 				<Typography variant="h6">Overlay</Typography>
-				<TextField
-					select
-					fullWidth
-					label="Position"
-					variant="outlined"
-					color="secondary"
-					value={settings.overlayPosition}
-					className={classes.shortcutField}
-					SelectProps={{ native: true }}
-					InputLabelProps={{ shrink: true }}
-					onChange={(ev) => {
-						setSettings({
-							type: 'setOne',
-							action: ['overlayPosition', ev.target.value],
-						});
-					}}
-				>
-					{(storeConfig.schema?.overlayPosition?.enum as string[]).map(
-						(position) => (
-							<option key={position} value={position}>
-								{position[0].toUpperCase()}
-								{position.substring(1)}
-							</option>
-						)
-					)}
-				</TextField>
 				<FormControlLabel
-					label="Meeting Overlay"
-					checked={settings.meetingOverlay}
+					label="Crewlink on top"
+					checked={settings.alwaysOnTop}
 					onChange={(_, checked: boolean) => {
 						setSettings({
 							type: 'setOne',
-							action: ['meetingOverlay', checked],
+							action: ['alwaysOnTop', checked],
+						});
+					}}
+					control={<Checkbox />}
+				/>
+				<FormControlLabel
+					label="Enable Overlay"
+					checked={settings.enableOverlay}
+					onChange={(_, checked: boolean) => {
+						setSettings({
+							type: 'setOne',
+							action: ['enableOverlay', checked],
+						});
+					}}
+					control={<Checkbox />}
+				/>
+				{settings.enableOverlay && (
+					<>
+						<FormControlLabel
+							label="compact Overlay"
+							checked={settings.compactOverlay}
+							onChange={(_, checked: boolean) => {
+								setSettings({
+									type: 'setOne',
+									action: ['compactOverlay', checked],
+								});
+							}}
+							control={<Checkbox />}
+						/>
+						<FormControlLabel
+							label="Meeting Overlay"
+							checked={settings.meetingOverlay}
+							onChange={(_, checked: boolean) => {
+								setSettings({
+									type: 'setOne',
+									action: ['meetingOverlay', checked],
+								});
+							}}
+							control={<Checkbox />}
+						/>
+						<TextField
+							select
+							label="Overlay Position"
+							variant="outlined"
+							color="secondary"
+							value={settings.overlayPosition}
+							className={classes.shortcutField}
+							SelectProps={{ native: true }}
+							InputLabelProps={{ shrink: true }}
+							onChange={(ev) => {
+								setSettings({
+									type: 'setOne',
+									action: ['overlayPosition', ev.target.value],
+								});
+							}}
+							onClick={updateDevices}
+						>
+							<option value="hidden">Hidden</option>
+							<option value="top">Top Center</option>
+							<option value="bottom_left">Bottom Left</option>
+							<option value="right">Right</option>
+							<option value="right1">Right-background</option>
+							<option value="left">Left</option>
+							<option value="left1">Left-background</option>
+						</TextField>
+					</>
+				)}
+
+				<Divider />
+				<Typography variant="h6">Advanced</Typography>
+				<FormControlLabel
+					label="NAT FIX"
+					checked={settings.natFix}
+					onChange={(_, checked: boolean) => {
+						openWarningDialog(
+							'Are you sure?',
+							'This will FIX the nat issues but will add a delay since it is using a server instead of p2p',
+							() => {
+								setSettings({
+									type: 'setOne',
+									action: ['natFix', checked],
+								});
+							},
+							checked
+						);
+					}}
+					control={<Checkbox />}
+				/>
+
+				<URLInput
+					initialURL={settings.serverURL}
+					onValidURL={(url: string) => {
+						setSettings({
+							type: 'setOne',
+							action: ['serverURL', url],
+						});
+					}}
+					className={classes.urlDialog}
+				/>
+				<Divider />
+				<Typography variant="h6">BETA/DEBUG</Typography>
+				<FormControlLabel
+					label="Mobile host"
+					checked={settings.mobileHost}
+					onChange={(_, checked: boolean) => {
+						setSettings({
+							type: 'setOne',
+							action: ['mobileHost', checked],
+						});
+					}}
+					control={<Checkbox />}
+				/>
+				<FormControlLabel
+					label="VAD enabled"
+					checked={settings.vadEnabled}
+					onChange={(_, checked: boolean) => {
+						openWarningDialog(
+							'Are you sure?',
+							"You won't see who's talking if deactivate.",
+							() => {
+								setSettings({
+									type: 'setOne',
+									action: ['vadEnabled', checked],
+								});
+							},
+							!checked
+						);
+					}}
+					control={<Checkbox />}
+				/>
+				<FormControlLabel
+					label="Echo Cancellation"
+					checked={settings.echoCancellation}
+					onChange={(_, checked: boolean) => {
+						setSettings({
+							type: 'setOne',
+							action: ['echoCancellation', checked],
+						});
+					}}
+					control={<Checkbox />}
+				/>
+				<FormControlLabel
+					label="Spatial audio"
+					checked={settings.enableSpatialAudio}
+					onChange={(_, checked: boolean) => {
+						setSettings({
+							type: 'setOne',
+							action: ['enableSpatialAudio', checked],
+						});
+					}}
+					control={<Checkbox />}
+				/>
+				<FormControlLabel
+					label="Noise Suppression"
+					checked={settings.noiseSuppression}
+					onChange={(_, checked: boolean) => {
+						setSettings({
+							type: 'setOne',
+							action: ['noiseSuppression', checked],
 						});
 					}}
 					control={<Checkbox />}
 				/>
 				<Divider />
-				<Typography variant="h6">Advanced</Typography>
+				<Typography variant="h6">Streaming settings</Typography>
 				<FormControlLabel
 					label="Show Lobby Code"
 					checked={!settings.hideCode}
@@ -867,31 +1270,66 @@ const Settings: React.FC<SettingsProps> = function ({
 					control={<Checkbox />}
 				/>
 				<FormControlLabel
-					label="Enable Spatial Audio"
-					checked={settings.enableSpatialAudio}
+					label="OBS browseroverlay"
+					checked={settings.obsOverlay}
 					onChange={(_, checked: boolean) => {
 						setSettings({
 							type: 'setOne',
-							action: ['enableSpatialAudio', checked],
+							action: ['obsOverlay', checked],
 						});
+						if (!settings.obsSecret) {
+							setSettings({
+								type: 'setOne',
+								action: ['obsSecret', Math.random().toString(36).substr(2, 9).toUpperCase()],
+							});
+						}
 					}}
 					control={<Checkbox />}
 				/>
-				<URLInput
-					initialURL={settings.serverURL}
-					onValidURL={(url: string) => {
-						setSettings({
-							type: 'setOne',
-							action: ['serverURL', url],
-						});
-					}}
-					className={classes.urlDialog}
-				/>
-				<Alert
-					className={classes.alert}
-					severity="info"
-					style={{ display: unsaved ? undefined : 'none' }}
-				>
+				{settings.obsOverlay && (
+					<>
+						<FormControlLabel
+							label="VS compatibility mode"
+							checked={settings.obsComptaibilityMode}
+							onChange={(_, checked: boolean) => {
+								openWarningDialog(
+									'Are you sure?',
+									'It is recommended to just change the voice server to a bettercrewlink voice server https://bettercrewl.ink for example.',
+									() => {
+										setSettings({
+											type: 'setOne',
+											action: ['obsComptaibilityMode', checked],
+										});
+									},
+									!checked
+								);
+							}}
+							control={<Checkbox />}
+						/>
+
+						<TextField
+							fullWidth
+							spellCheck={false}
+							label="Obs browsersource url"
+							value={`${
+								(settings.obsComptaibilityMode && !settings.serverURL.includes('bettercrewl.ink')) ||
+								settings.serverURL.includes('https')
+									? 'https'
+									: 'http'
+							}://obs.bettercrewlink.app/?compact=${settings.compactOverlay ? '1' : '0'}&position=${
+								settings.overlayPosition
+							}&meeting=${settings.meetingOverlay ? '1' : '0'}&secret=${settings.obsSecret}&server=${
+								settings.obsComptaibilityMode ? 'https://bettercrewl.ink' : settings.serverURL
+							}`}
+							variant="outlined"
+							color="primary"
+							InputProps={{
+								readOnly: true,
+							}}
+						/>
+					</>
+				)}
+				<Alert className={classes.alert} severity="info" style={{ display: unsaved ? undefined : 'none' }}>
 					Exit Settings to apply changes
 				</Alert>
 			</div>

@@ -21,9 +21,6 @@ settings:
   react:
     version: 'detect'
 rules:
-  no-empty:
-    - error
-    - allowEmptyCatch: true
   linebreak-style:
     - error
     - unix

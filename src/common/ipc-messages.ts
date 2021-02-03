@@ -9,21 +9,21 @@ export enum IpcMessages {
 	SEND_TO_OVERLAY = 'SEND_TO_OVERLAY',
 }
 
-// Renderer 1 --> Overlay Window (send/on)
+// Renderer --> Main (sendSync/on)
+export enum IpcSyncMessages {
+	GET_INITIAL_STATE = 'GET_INITIAL_STATE',
+}
+
 export enum IpcOverlayMessages {
 	NOTIFY_GAME_STATE_CHANGED = 'NOTIFY_GAME_STATE_CHANGED',
 	NOTIFY_VOICE_STATE_CHANGED = 'NOTIFY_VOICE_STATE_CHANGED',
 	NOTIFY_SETTINGS_CHANGED = 'NOTIFY_SETTINGS_CHANGED',
 }
 
-// Renderer --> Main (sendSync/on)
-export enum IpcSyncMessages {
-	GET_INITIAL_STATE = 'GET_INITIAL_STATE',
-}
-
 // Renderer --> Main (invoke/handle)
 export enum IpcHandlerMessages {
 	START_HOOK = 'START_HOOK',
+	RESET_KEYHOOKS = 'RESET_KEYHOOKS',
 }
 
 // Main --> Renderer (send/on)
